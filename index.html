@@ -1,0 +1,762 @@
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+
+<style>
+  :root{
+    --ink:#10161d;
+    --paper:#171f28;
+    --paper-raised:#1c2530;
+    --rule:#2a3540;
+    --rule-soft:#232c36;
+    --text:#e9edf1;
+    --muted:#83909d;
+    --gain:#4fb8a6;
+    --loss:#c1614a;
+    --gold:#c9a15c;
+  }
+  *{box-sizing:border-box;}
+  @media (prefers-reduced-motion: reduce){
+    *{animation-duration:0.001ms !important; transition-duration:0.001ms !important;}
+  }
+  body, .root{
+    background:var(--ink);
+    color:var(--text);
+    font-family:'Inter', sans-serif;
+    margin:0;
+    padding:0;
+  }
+  .root{
+    max-width:820px;
+    margin:0 auto;
+    padding:28px 20px 80px;
+  }
+  .masthead{
+    display:flex;
+    justify-content:space-between;
+    align-items:flex-start;
+    border-bottom:1px solid var(--rule);
+    padding-bottom:18px;
+    margin-bottom:26px;
+  }
+  .masthead h1{
+    font-family:'Fraunces', serif;
+    font-optical-sizing:auto;
+    font-weight:600;
+    font-size:22px;
+    letter-spacing:0.02em;
+    margin:0 0 4px;
+    text-transform:uppercase;
+  }
+  .masthead .sub{
+    color:var(--muted);
+    font-size:13px;
+    font-family:'IBM Plex Mono', monospace;
+  }
+  .currency-picker{ display:flex; gap:4px; }
+  .currency-picker button{
+    background:transparent;
+    border:1px solid var(--rule);
+    color:var(--muted);
+    font-family:'IBM Plex Mono', monospace;
+    font-size:12px;
+    padding:4px 8px;
+    border-radius:3px;
+    cursor:pointer;
+  }
+  .currency-picker button.active{ color:var(--gold); border-color:var(--gold); }
+  button:focus-visible, input:focus-visible, select:focus-visible{
+    outline:2px solid var(--gold);
+    outline-offset:2px;
+  }
+
+  .hero{ padding:22px 0 28px; border-bottom:1px solid var(--rule); margin-bottom:28px; }
+  .hero .label{ font-size:12px; text-transform:uppercase; letter-spacing:0.12em; color:var(--muted); margin-bottom:10px; }
+  .hero .total{
+    font-family:'Fraunces', serif;
+    font-size:50px;
+    font-weight:500;
+    line-height:1;
+    display:flex;
+    align-items:baseline;
+    gap:16px;
+    flex-wrap:wrap;
+  }
+  .delta-badge{
+    font-family:'IBM Plex Mono', monospace;
+    font-size:14px;
+    padding:4px 9px;
+    border-radius:3px;
+    border:1px solid;
+  }
+  .delta-badge.gain{ color:var(--gain); border-color:var(--gain); background:rgba(79,184,166,0.08); }
+  .delta-badge.loss{ color:var(--loss); border-color:var(--loss); background:rgba(193,97,74,0.08); }
+  .delta-badge.flat{ color:var(--muted); border-color:var(--rule); }
+  .hero .asof{ font-family:'IBM Plex Mono', monospace; color:var(--muted); font-size:12px; margin-top:10px; }
+  .hero .pv-line{
+    font-family:'IBM Plex Mono', monospace;
+    font-size:13px;
+    color:var(--muted);
+    margin-top:8px;
+  }
+  .hero .pv-line .v{ font-weight:600; }
+  .hero .pv-line .v.pos{ color:var(--gain); }
+  .hero .pv-line .v.neg{ color:var(--loss); }
+
+  section{ margin-bottom:34px; }
+  .section-head{ display:flex; justify-content:space-between; align-items:center; margin-bottom:14px; }
+  .section-head h2{
+    font-family:'Fraunces', serif;
+    font-size:16px;
+    font-weight:600;
+    text-transform:uppercase;
+    letter-spacing:0.08em;
+    margin:0;
+    color:var(--text);
+  }
+
+  .tabs{ display:flex; gap:2px; margin-bottom:16px; }
+  .tab{
+    background:var(--paper);
+    border:1px solid var(--rule);
+    color:var(--muted);
+    font-family:'IBM Plex Mono', monospace;
+    font-size:12px;
+    padding:7px 14px;
+    cursor:pointer;
+    border-radius:3px;
+  }
+  .tab.active{ color:var(--ink); background:var(--gold); border-color:var(--gold); font-weight:600; }
+
+  .chart-wrap{
+    background:var(--paper);
+    border:1px solid var(--rule);
+    border-radius:4px;
+    padding:14px 10px 6px;
+    overflow-x:auto;
+  }
+  .table-wrap{ overflow-x:auto; }
+
+  table.ledger{
+    width:100%;
+    border-collapse:collapse;
+    font-family:'IBM Plex Mono', monospace;
+    font-size:13px;
+    margin-top:12px;
+    min-width:560px;
+  }
+  table.ledger th{
+    text-align:left;
+    color:var(--muted);
+    font-weight:500;
+    font-size:11px;
+    text-transform:uppercase;
+    letter-spacing:0.06em;
+    padding:6px 8px;
+    border-bottom:1px solid var(--rule);
+    white-space:nowrap;
+  }
+  table.ledger td{ padding:8px 8px; border-bottom:1px solid var(--rule-soft); white-space:nowrap; }
+  table.ledger tr:last-child td{ border-bottom:none; }
+  .num{ text-align:right; font-variant-numeric:tabular-nums; }
+  .pos{ color:var(--gain); }
+  .neg{ color:var(--loss); }
+
+  .stamp{
+    display:inline-flex;
+    align-items:center;
+    justify-content:center;
+    font-family:'IBM Plex Mono', monospace;
+    font-size:11px;
+    font-weight:600;
+    letter-spacing:0.04em;
+    padding:3px 8px;
+    border-radius:2px;
+    border:1px dashed;
+    transform:rotate(-1.2deg);
+    text-transform:uppercase;
+    white-space:nowrap;
+  }
+  .theme-chip{
+    display:inline-block;
+    font-size:11px;
+    padding:2px 7px;
+    border-radius:9px;
+    background:var(--rule-soft);
+    color:var(--muted);
+    white-space:nowrap;
+  }
+
+  .alloc-bar-track{
+    width:90px;
+    height:7px;
+    background:var(--rule-soft);
+    border-radius:4px;
+    overflow:hidden;
+    display:inline-block;
+    vertical-align:middle;
+    margin-right:6px;
+  }
+  .alloc-bar-fill{ height:100%; border-radius:4px; }
+
+  .empty{
+    color:var(--muted);
+    font-size:13px;
+    padding:24px 0;
+    text-align:center;
+    border:1px dashed var(--rule);
+    border-radius:4px;
+  }
+
+  .btn{
+    background:var(--gold);
+    color:var(--ink);
+    border:none;
+    font-family:'Inter', sans-serif;
+    font-weight:600;
+    font-size:13px;
+    padding:9px 16px;
+    border-radius:3px;
+    cursor:pointer;
+  }
+  .btn.secondary{ background:transparent; color:var(--text); border:1px solid var(--rule); font-weight:500; }
+  .btn.ghost{ background:transparent; color:var(--muted); border:none; font-size:12px; text-decoration:underline; padding:4px; cursor:pointer; }
+  .btn.danger{ color:var(--loss); }
+  .row-actions{ display:flex; gap:10px; justify-content:flex-end; }
+
+  .form-card{
+    background:var(--paper-raised);
+    border:1px solid var(--rule);
+    border-radius:5px;
+    padding:18px;
+    margin-top:12px;
+  }
+  .form-card label{
+    display:block;
+    font-size:11px;
+    text-transform:uppercase;
+    letter-spacing:0.06em;
+    color:var(--muted);
+    margin-bottom:5px;
+  }
+  .form-card input{
+    background:var(--ink);
+    border:1px solid var(--rule);
+    color:var(--text);
+    font-family:'IBM Plex Mono', monospace;
+    font-size:13px;
+    padding:8px 10px;
+    border-radius:3px;
+    width:100%;
+  }
+  .entry-card{
+    border:1px solid var(--rule);
+    border-radius:4px;
+    padding:12px;
+    margin-bottom:10px;
+    background:var(--ink);
+  }
+  .entry-grid-1{ display:grid; grid-template-columns:1fr 1.4fr 1fr; gap:8px; margin-bottom:8px; }
+  .entry-grid-2{ display:grid; grid-template-columns:1fr 1fr 1fr; gap:8px; }
+  .entry-preview{
+    font-family:'IBM Plex Mono', monospace;
+    font-size:11px;
+    color:var(--muted);
+    margin-top:8px;
+  }
+  .entry-preview .pos{ color:var(--gain); }
+  .entry-preview .neg{ color:var(--loss); }
+  .entry-card-top{ display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; }
+  .entry-card-top span{ font-size:11px; color:var(--muted); text-transform:uppercase; letter-spacing:0.06em; }
+  .rm-link{ background:none; border:none; color:var(--loss); font-size:11px; cursor:pointer; text-decoration:underline; }
+
+  .date-field{ margin-bottom:14px; max-width:220px; }
+  .form-actions{ display:flex; justify-content:space-between; align-items:center; margin-top:16px; }
+
+  ::placeholder{ color:#4a5560; }
+
+  @media (max-width:520px){
+    .hero .total{ font-size:36px; }
+    .entry-grid-1, .entry-grid-2{ grid-template-columns:1fr; }
+  }
+</style>
+
+<div class="root" id="app"></div>
+
+<script>
+(function(){
+  const PALETTE = ['#c9a15c','#4fb8a6','#c1614a','#6e8cae','#9b6b9e','#8a9a5b','#d4874f','#5a94b3'];
+  const CURRENCIES = ['€','$','£'];
+
+  let state = { snapshots: [], settings: { currency: '€' } };
+  let periodTab = 'month';
+  let formOpen = false;
+  let editingId = null;
+  let formDate = todayISO();
+  let formEntries = [ blankEntry() ];
+
+  function blankEntry(){ return { numero:'', nom:'', libelle:'', quantite:'', pru:'', cours:'' }; }
+  function todayISO(){ return new Date().toISOString().slice(0,10); }
+  function uid(){ return 's' + Date.now() + Math.random().toString(36).slice(2,8); }
+
+  // Backward/robust normalisation: fills in sane numbers, tolerates old data shape ({ticker,name,value})
+  function normalizeEntry(e){
+    const numero = e.numero || e.ticker || '';
+    const nom = e.nom || e.name || '';
+    const libelle = e.libelle || '';
+    let quantite = Number(e.quantite);
+    let pru = Number(e.pru);
+    let cours = Number(e.cours);
+    if(isNaN(quantite) || quantite === 0){
+      if(e.value !== undefined){ quantite = 1; cours = Number(e.value) || 0; pru = Number(e.value) || 0; }
+      else quantite = Number(e.quantite) || 0;
+    }
+    if(isNaN(cours)) cours = 0;
+    if(isNaN(pru)) pru = 0;
+    return { numero, nom, libelle, quantite, pru, cours };
+  }
+
+  function tickerColor(code){
+    let h = 0;
+    const s = code || '?';
+    for(let i=0;i<s.length;i++) h = (h*31 + s.charCodeAt(i)) >>> 0;
+    return PALETTE[h % PALETTE.length];
+  }
+
+  function fmtMoney(v){
+    const n = new Intl.NumberFormat('fr-FR', { maximumFractionDigits: 0 }).format(Math.round(v || 0));
+    return n + ' ' + state.settings.currency;
+  }
+  function fmtMoney2(v){
+    const n = new Intl.NumberFormat('fr-FR', { minimumFractionDigits:2, maximumFractionDigits: 2 }).format(v || 0);
+    return n + ' ' + state.settings.currency;
+  }
+  function fmtPct(v){
+    const sign = v > 0 ? '+' : '';
+    return sign + v.toFixed(1).replace('.', ',') + ' %';
+  }
+  function fmtDate(iso){
+    const d = new Date(iso + 'T00:00:00');
+    return d.toLocaleDateString('fr-FR', { day:'2-digit', month:'2-digit', year:'numeric' });
+  }
+
+  const STORAGE_KEY = 'registre-etf-portfolio-data';
+
+  async function loadData(){
+    try{
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if(raw){
+        const parsed = JSON.parse(raw);
+        if(parsed && Array.isArray(parsed.snapshots)){
+          state = {
+            snapshots: parsed.snapshots.map(s => ({ ...s, entries: s.entries.map(normalizeEntry) })),
+            settings: parsed.settings || { currency:'€' }
+          };
+        }
+      }
+    }catch(e){ console.error('Lecture impossible, stockage local vide ou corrompu.', e); }
+    render();
+  }
+  async function saveData(){
+    try{ localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); }
+    catch(e){ console.error('Erreur de sauvegarde locale', e); alert('La sauvegarde locale a échoué. Pensez à exporter vos données.'); }
+  }
+
+  function exportData(){
+    const blob = new Blob([JSON.stringify(state, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    const stamp = todayISO();
+    a.href = url;
+    a.download = 'registre-etf-sauvegarde-' + stamp + '.json';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  }
+
+  function importData(file){
+    const reader = new FileReader();
+    reader.onload = async (evt) => {
+      try{
+        const parsed = JSON.parse(evt.target.result);
+        if(!parsed || !Array.isArray(parsed.snapshots)) throw new Error('format invalide');
+        if(state.snapshots.length > 0){
+          if(!confirm('Cela va remplacer les données actuellement affichées par celles du fichier importé. Continuer ?')) return;
+        }
+        state = {
+          snapshots: parsed.snapshots.map(s => ({ ...s, entries: s.entries.map(normalizeEntry) })),
+          settings: parsed.settings || { currency:'€' }
+        };
+        await saveData();
+        render();
+      }catch(e){
+        alert('Ce fichier ne semble pas être une sauvegarde valide du registre ETF.');
+      }
+    };
+    reader.readAsText(file);
+  }
+
+  function sortedSnapshots(){ return [...state.snapshots].sort((a,b) => a.date.localeCompare(b.date)); }
+
+  function entryValue(e){ return (Number(e.quantite)||0) * (Number(e.cours)||0); }
+  function entryCost(e){ return (Number(e.quantite)||0) * (Number(e.pru)||0); }
+  function total(snapshot){ return snapshot.entries.reduce((s,e) => s + entryValue(e), 0); }
+  function totalCost(snapshot){ return snapshot.entries.reduce((s,e) => s + entryCost(e), 0); }
+
+  // ---- Regroupement par période (bilans mensuels / trimestriels / annuels) ----
+  function periodKey(dateStr, granularity){
+    const [y,m] = dateStr.split('-').map(Number);
+    if(granularity === 'month') return y + '-' + String(m).padStart(2,'0');
+    if(granularity === 'quarter') return y + '-T' + (Math.ceil(m/3));
+    return String(y);
+  }
+  function periodLabel(key, granularity){
+    if(granularity === 'month'){
+      const [y,m] = key.split('-');
+      const d = new Date(Number(y), Number(m)-1, 1);
+      return d.toLocaleDateString('fr-FR', { month:'short', year:'numeric' });
+    }
+    if(granularity === 'quarter') return key.replace('-', ' ');
+    return key;
+  }
+  function groupByPeriod(granularity){
+    const asc = sortedSnapshots();
+    const map = new Map();
+    asc.forEach(s => { map.set(periodKey(s.date, granularity), s); });
+    return [...map.entries()].map(([key, snap]) => ({
+      key, label: periodLabel(key, granularity), date: snap.date, total: total(snap)
+    }));
+  }
+
+  // ---- Graphique SVG ----
+  function renderChart(points){
+    if(points.length === 0) return '<div class="empty">Aucune donnée pour cette période.</div>';
+    if(points.length === 1) return '<div class="empty">Ajoutez au moins deux bilans pour voir une évolution.</div>';
+    const w = Math.max(360, points.length * 78);
+    const h = 150;
+    const padL = 46, padR = 16, padT = 16, padB = 14;
+    const vals = points.map(p => p.total);
+    const min = Math.min(...vals), max = Math.max(...vals);
+    const range = (max - min) || 1;
+    const innerW = w - padL - padR, innerH = h - padT - padB;
+    const x = i => padL + (innerW * (points.length === 1 ? 0.5 : i/(points.length-1)));
+    const y = v => padT + innerH - ((v - min)/range) * innerH;
+
+    const path = points.map((p,i) => (i===0?'M':'L') + x(i).toFixed(1) + ',' + y(p.total).toFixed(1)).join(' ');
+    const areaPath = path + ' L' + x(points.length-1).toFixed(1) + ',' + (padT+innerH) + ' L' + x(0).toFixed(1) + ',' + (padT+innerH) + ' Z';
+    const dots = points.map((p,i) => {
+      const cx = x(i).toFixed(1), cy = y(p.total).toFixed(1);
+      return '<circle cx="'+cx+'" cy="'+cy+'" r="3.5" fill="#c9a15c"><title>'+p.label+' · '+fmtMoney(p.total)+'</title></circle>';
+    }).join('');
+    const labels = points.map((p,i) => {
+      const cx = x(i).toFixed(1);
+      return '<text x="'+cx+'" y="'+(h-2)+'" font-size="10" fill="#83909d" text-anchor="middle" font-family="IBM Plex Mono, monospace">'+p.label+'</text>';
+    }).join('');
+
+    return '<svg width="'+w+'" height="'+h+'" viewBox="0 0 '+w+' '+h+'" role="img" aria-label="Évolution du portefeuille">'
+      + '<defs><linearGradient id="areaGrad" x1="0" y1="0" x2="0" y2="1">'
+      + '<stop offset="0%" stop-color="#c9a15c" stop-opacity="0.22"/>'
+      + '<stop offset="100%" stop-color="#c9a15c" stop-opacity="0"/></linearGradient></defs>'
+      + '<path d="'+areaPath+'" fill="url(#areaGrad)" stroke="none"/>'
+      + '<path d="'+path+'" fill="none" stroke="#c9a15c" stroke-width="2"/>'
+      + dots + labels + '</svg>';
+  }
+
+  // ---- Rendu ----
+  function render(){
+    const app = document.getElementById('app');
+    const asc = sortedSnapshots();
+    const latest = asc[asc.length-1] || null;
+    const prev = asc[asc.length-2] || null;
+    const latestTotal = latest ? total(latest) : 0;
+    const prevTotal = prev ? total(prev) : null;
+    const delta = (prevTotal !== null && prevTotal !== 0) ? ((latestTotal - prevTotal) / prevTotal * 100) : null;
+    const deltaClass = delta === null ? 'flat' : (delta > 0 ? 'gain' : (delta < 0 ? 'loss' : 'flat'));
+    const deltaArrow = delta === null ? '' : (delta > 0 ? ' ▲' : (delta < 0 ? ' ▼' : ' ='));
+
+    const latestCost = latest ? totalCost(latest) : 0;
+    const latestPV = latestTotal - latestCost;
+    const latestPVPct = latestCost !== 0 ? (latestPV/latestCost*100) : null;
+
+    const periodPoints = groupByPeriod(periodTab);
+    const periodRows = periodPoints.map((p,i) => {
+      const prevP = periodPoints[i-1];
+      const pct = prevP && prevP.total !== 0 ? ((p.total - prevP.total)/prevP.total*100) : null;
+      return { ...p, pct };
+    }).reverse();
+
+    const descHistory = [...state.snapshots].sort((a,b) => b.date.localeCompare(a.date));
+
+    app.innerHTML = `
+      <div class="masthead">
+        <div>
+          <h1>Registre — Portefeuille ETF</h1>
+          <div class="sub">${latest ? 'dernier bilan : ' + fmtDate(latest.date) : 'aucun bilan enregistré'}</div>
+          <div class="sub" style="margin-top:3px; opacity:0.75;">Données stockées dans ce navigateur — pensez à exporter régulièrement.</div>
+        </div>
+        <div style="display:flex; align-items:center; gap:14px;">
+          <div class="currency-picker">
+            ${CURRENCIES.map(c => `<button data-currency="${c}" class="${state.settings.currency===c?'active':''}">${c}</button>`).join('')}
+          </div>
+          <button class="btn ghost" id="btn-export" style="text-decoration:none; border:1px solid var(--rule); border-radius:3px; padding:5px 9px;">⭳ Exporter</button>
+          <label class="btn ghost" for="file-import" style="text-decoration:none; border:1px solid var(--rule); border-radius:3px; padding:5px 9px; cursor:pointer;">⭱ Importer</label>
+          <input type="file" id="file-import" accept="application/json" style="display:none;">
+        </div>
+      </div>
+
+      <div class="hero">
+        <div class="label">Valeur totale</div>
+        <div class="total">
+          ${fmtMoney(latestTotal)}
+          ${delta !== null ? `<span class="delta-badge ${deltaClass}">${fmtPct(delta)}${deltaArrow} depuis le dernier bilan</span>` : ''}
+        </div>
+        ${latest ? `<div class="asof">au ${fmtDate(latest.date)}</div>` : ''}
+        ${latest && latestCost > 0 ? `<div class="pv-line">Plus/moins-value latente : <span class="v ${latestPV>=0?'pos':'neg'}">${fmtMoney(latestPV)} (${fmtPct(latestPVPct)})</span> — coût d'acquisition total : ${fmtMoney(latestCost)}</div>` : ''}
+      </div>
+
+      <section>
+        <div class="section-head"><h2>Bilans</h2></div>
+        <div class="tabs">
+          <button class="tab ${periodTab==='month'?'active':''}" data-tab="month">Mensuel</button>
+          <button class="tab ${periodTab==='quarter'?'active':''}" data-tab="quarter">Trimestriel</button>
+          <button class="tab ${periodTab==='year'?'active':''}" data-tab="year">Annuel</button>
+        </div>
+        <div class="chart-wrap">${renderChart(periodPoints)}</div>
+        ${periodRows.length ? `
+        <div class="table-wrap">
+        <table class="ledger">
+          <thead><tr><th>Période</th><th class="num">Valeur</th><th class="num">Variation</th></tr></thead>
+          <tbody>
+            ${periodRows.map(r => `
+              <tr>
+                <td>${r.label}</td>
+                <td class="num">${fmtMoney(r.total)}</td>
+                <td class="num ${r.pct===null?'':(r.pct>0?'pos':(r.pct<0?'neg':''))}">${r.pct===null?'—':fmtPct(r.pct)}</td>
+              </tr>`).join('')}
+          </tbody>
+        </table>
+        </div>` : ''}
+      </section>
+
+      <section>
+        <div class="section-head"><h2>Répartition actuelle</h2></div>
+        ${latest ? renderAllocation(latest) : '<div class="empty">Ajoutez un bilan pour voir le détail de vos lignes.</div>'}
+      </section>
+
+      <section>
+        <div class="section-head">
+          <h2>Historique</h2>
+          ${!formOpen ? `<button class="btn" id="btn-add">+ Ajouter un bilan</button>` : ''}
+        </div>
+        ${formOpen ? renderForm() : ''}
+        ${descHistory.length ? `
+        <div class="table-wrap">
+        <table class="ledger" style="margin-top:${formOpen?18:0}px">
+          <thead><tr><th>Date</th><th class="num">Total</th><th class="num">Variation</th><th></th></tr></thead>
+          <tbody>
+            ${descHistory.map((s) => {
+              const idxAsc = asc.findIndex(x => x.id === s.id);
+              const p = idxAsc > 0 ? asc[idxAsc-1] : null;
+              const t = total(s);
+              const pct = p ? ((t - total(p))/(total(p)||1)*100) : null;
+              return `<tr>
+                <td>${fmtDate(s.date)}</td>
+                <td class="num">${fmtMoney(t)}</td>
+                <td class="num ${pct===null?'':(pct>0?'pos':(pct<0?'neg':''))}">${pct===null?'—':fmtPct(pct)}</td>
+                <td class="row-actions">
+                  <button class="btn ghost" data-edit="${s.id}">modifier</button>
+                  <button class="btn ghost danger" data-del="${s.id}">supprimer</button>
+                </td>
+              </tr>`;
+            }).join('')}
+          </tbody>
+        </table>
+        </div>` : (!formOpen ? '<div class="empty">Aucun bilan pour l’instant. Ajoutez votre premier relevé de portefeuille.</div>' : '')}
+      </section>
+    `;
+    bindEvents();
+  }
+
+  function renderAllocation(snapshot){
+    const t = total(snapshot) || 1;
+    const rows = [...snapshot.entries].sort((a,b) => entryValue(b) - entryValue(a));
+    return `
+      <div class="table-wrap">
+      <table class="ledger">
+        <thead>
+          <tr>
+            <th>N° ETF</th><th>Nom</th><th>Libellé</th>
+            <th class="num">Quantité</th><th class="num">PRU</th><th class="num">Cours</th>
+            <th class="num">Valeur</th><th class="num">+/- value</th><th>Répartition</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${rows.map(e => {
+            const color = tickerColor(e.numero);
+            const v = entryValue(e);
+            const cost = entryCost(e);
+            const pv = v - cost;
+            const pvPct = cost !== 0 ? (pv/cost*100) : null;
+            const pct = (v / t * 100);
+            return `
+              <tr>
+                <td><span class="stamp" style="border-color:${color}; color:${color};">${e.numero || '—'}</span></td>
+                <td>${e.nom || '—'}</td>
+                <td>${e.libelle ? `<span class="theme-chip">${e.libelle}</span>` : '—'}</td>
+                <td class="num">${e.quantite || 0}</td>
+                <td class="num">${fmtMoney2(e.pru)}</td>
+                <td class="num">${fmtMoney2(e.cours)}</td>
+                <td class="num">${fmtMoney(v)}</td>
+                <td class="num ${cost?(pv>=0?'pos':'neg'):''}">${cost ? fmtMoney(pv) + ' (' + fmtPct(pvPct) + ')' : '—'}</td>
+                <td><span class="alloc-bar-track"><span class="alloc-bar-fill" style="width:${pct.toFixed(1)}%; background:${color};"></span></span>${pct.toFixed(1).replace('.',',')}%</td>
+              </tr>`;
+          }).join('')}
+        </tbody>
+      </table>
+      </div>
+    `;
+  }
+
+  function renderForm(){
+    return `
+      <div class="form-card">
+        <div class="date-field">
+          <label for="f-date">Date du bilan</label>
+          <input type="date" id="f-date" value="${formDate}">
+        </div>
+        <label style="margin-bottom:10px;">Lignes du portefeuille</label>
+        ${formEntries.map((e,i) => {
+          const v = entryValue(e), cost = entryCost(e), pv = v-cost;
+          const pvPct = cost !== 0 ? (pv/cost*100) : null;
+          return `
+          <div class="entry-card" data-row="${i}">
+            <div class="entry-card-top">
+              <span>Ligne ${i+1}</span>
+              ${formEntries.length > 1 ? `<button class="rm-link" data-rm="${i}">retirer</button>` : ''}
+            </div>
+            <div class="entry-grid-1">
+              <input type="text" placeholder="N° ETF (ex. CW8)" value="${e.numero}" data-field="numero" data-row="${i}" maxlength="16">
+              <input type="text" placeholder="Nom (ex. Amundi MSCI World)" value="${e.nom}" data-field="nom" data-row="${i}">
+              <input type="text" placeholder="Libellé (ex. Monde, Eau...)" value="${e.libelle}" data-field="libelle" data-row="${i}">
+            </div>
+            <div class="entry-grid-2">
+              <div><label style="margin-bottom:2px;">Quantité</label><input type="number" value="${e.quantite}" data-field="quantite" data-row="${i}" step="1" min="0"></div>
+              <div><label style="margin-bottom:2px;">PRU</label><input type="number" value="${e.pru}" data-field="pru" data-row="${i}" step="0.01" min="0"></div>
+              <div><label style="margin-bottom:2px;">Cours</label><input type="number" value="${e.cours}" data-field="cours" data-row="${i}" step="0.01" min="0"></div>
+            </div>
+            ${(e.quantite && e.cours) ? `<div class="entry-preview">Valeur : ${fmtMoney(v)}${cost ? ` — +/- value : <span class="${pv>=0?'pos':'neg'}">${fmtMoney(pv)} (${fmtPct(pvPct)})</span>` : ''}</div>` : ''}
+          </div>`;
+        }).join('')}
+        <button class="btn secondary" id="btn-add-row" style="margin-top:2px;">+ Ajouter une ligne</button>
+        <div class="form-actions">
+          <button class="btn ghost" id="btn-cancel">Annuler</button>
+          <button class="btn" id="btn-save">Enregistrer le bilan</button>
+        </div>
+      </div>
+    `;
+  }
+
+  function bindEvents(){
+    const app = document.getElementById('app');
+
+    app.querySelectorAll('[data-currency]').forEach(btn => {
+      btn.onclick = () => { state.settings.currency = btn.dataset.currency; saveData(); render(); };
+    });
+
+    const exportBtn = app.querySelector('#btn-export');
+    if(exportBtn) exportBtn.onclick = exportData;
+
+    const importInput = app.querySelector('#file-import');
+    if(importInput) importInput.onchange = (e) => {
+      const file = e.target.files[0];
+      if(file) importData(file);
+      e.target.value = '';
+    };
+    app.querySelectorAll('[data-tab]').forEach(btn => {
+      btn.onclick = () => { periodTab = btn.dataset.tab; render(); };
+    });
+
+    const addBtn = app.querySelector('#btn-add');
+    if(addBtn) addBtn.onclick = () => { formOpen = true; editingId = null; formDate = todayISO(); formEntries = [blankEntry()]; render(); };
+
+    app.querySelectorAll('[data-edit]').forEach(btn => {
+      btn.onclick = () => {
+        const s = state.snapshots.find(x => x.id === btn.dataset.edit);
+        if(!s) return;
+        editingId = s.id;
+        formDate = s.date;
+        formEntries = s.entries.map(e => ({ numero:e.numero, nom:e.nom, libelle:e.libelle||'', quantite:e.quantite, pru:e.pru, cours:e.cours }));
+        formOpen = true;
+        render();
+      };
+    });
+
+    app.querySelectorAll('[data-del]').forEach(btn => {
+      btn.onclick = () => {
+        if(!confirm('Supprimer ce bilan ?')) return;
+        state.snapshots = state.snapshots.filter(x => x.id !== btn.dataset.del);
+        saveData(); render();
+      };
+    });
+
+    const cancelBtn = app.querySelector('#btn-cancel');
+    if(cancelBtn) cancelBtn.onclick = () => { formOpen = false; render(); };
+
+    const dateInput = app.querySelector('#f-date');
+    if(dateInput) dateInput.onchange = (e) => { formDate = e.target.value; };
+
+    app.querySelectorAll('[data-field]').forEach(input => {
+      input.oninput = (e) => {
+        const row = Number(e.target.dataset.row);
+        const field = e.target.dataset.field;
+        formEntries[row][field] = field === 'numero' ? e.target.value.toUpperCase() : e.target.value;
+      };
+      input.onblur = () => { render(); }; // met à jour l'aperçu valeur / +/- value sans casser la saisie en cours
+    });
+
+    app.querySelectorAll('[data-rm]').forEach(btn => {
+      btn.onclick = () => {
+        const row = Number(btn.dataset.rm);
+        if(formEntries.length > 1){ formEntries.splice(row,1); render(); }
+      };
+    });
+
+    const addRowBtn = app.querySelector('#btn-add-row');
+    if(addRowBtn) addRowBtn.onclick = () => { formEntries.push(blankEntry()); render(); };
+
+    const saveBtn = app.querySelector('#btn-save');
+    if(saveBtn) saveBtn.onclick = async () => {
+      const cleaned = formEntries
+        .filter(e => e.numero.trim() !== '' && e.quantite !== '' && !isNaN(Number(e.quantite)) && e.cours !== '' && !isNaN(Number(e.cours)))
+        .map(e => ({
+          numero: e.numero.trim().toUpperCase(),
+          nom: (e.nom||'').trim(),
+          libelle: (e.libelle||'').trim(),
+          quantite: Number(e.quantite),
+          pru: Number(e.pru) || 0,
+          cours: Number(e.cours)
+        }));
+      if(cleaned.length === 0){ alert('Ajoutez au moins une ligne avec un n° ETF, une quantité et un cours.'); return; }
+      if(!formDate){ alert('Choisissez une date pour ce bilan.'); return; }
+
+      if(editingId){
+        const idx = state.snapshots.findIndex(s => s.id === editingId);
+        if(idx > -1) state.snapshots[idx] = { id: editingId, date: formDate, entries: cleaned };
+      } else {
+        const existing = state.snapshots.find(s => s.date === formDate);
+        if(existing){
+          if(!confirm('Un bilan existe déjà à cette date. Le remplacer ?')) return;
+          existing.entries = cleaned;
+        } else {
+          state.snapshots.push({ id: uid(), date: formDate, entries: cleaned });
+        }
+      }
+      formOpen = false; editingId = null;
+      await saveData();
+      render();
+    };
+  }
+
+  loadData();
+})();
+</script>
