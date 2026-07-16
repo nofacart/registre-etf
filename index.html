@@ -335,9 +335,11 @@
 
   let state = { snapshots: [], settings: { currency: '€' } };
   let periodTab = 'month';
+  let etfTab = null;
   let formOpen = false;
   let editingId = null;
   let formDate = todayISO();
+  let formApport = '0';
   let formEntries = [ blankEntry() ];
 
   function blankEntry(){ return { numero:'', nom:'', libelle:'', quantite:'', pru:'', cours:'' }; }
@@ -394,7 +396,7 @@
         const parsed = JSON.parse(raw);
         if(parsed && Array.isArray(parsed.snapshots)){
           state = {
-            snapshots: parsed.snapshots.map(s => ({ ...s, entries: s.entries.map(normalizeEntry) })),
+            snapshots: parsed.snapshots.map(s => ({ ...s, apport: Number(s.apport) || 0, entries: s.entries.map(normalizeEntry) })),
             settings: parsed.settings || { currency:'€' }
           };
         }
@@ -430,7 +432,7 @@
           if(!confirm('Cela va remplacer les données actuellement affichées par celles du fichier importé. Continuer ?')) return;
         }
         state = {
-          snapshots: parsed.snapshots.map(s => ({ ...s, entries: s.entries.map(normalizeEntry) })),
+          snapshots: parsed.snapshots.map(s => ({ ...s, apport: Number(s.apport) || 0, entries: s.entries.map(normalizeEntry) })),
           settings: parsed.settings || { currency:'€' }
         };
         await saveData();
@@ -448,6 +450,21 @@
   function entryCost(e){ return (Number(e.quantite)||0) * (Number(e.pru)||0); }
   function total(snapshot){ return snapshot.entries.reduce((s,e) => s + entryValue(e), 0); }
   function totalCost(snapshot){ return snapshot.entries.reduce((s,e) => s + entryCost(e), 0); }
+
+  // Cumul des apports/retraits, snapshot par snapshot, dans l'ordre chronologique
+  function cumulativeApports(asc){
+    const map = new Map();
+    let running = 0;
+    asc.forEach(s => { running += (Number(s.apport) || 0); map.set(s.id, running); });
+    return map;
+  }
+
+  // Performance réelle = variation de valeur hors effet des apports/retraits
+  function realPerformance(totalNow, totalPrev, apportPeriode){
+    if(totalPrev === null || totalPrev === undefined || totalPrev === 0) return null;
+    const gainMarche = totalNow - totalPrev - apportPeriode;
+    return gainMarche / totalPrev * 100;
+  }
 
   // ---- Regroupement par période (bilans mensuels / trimestriels / annuels) ----
   function periodKey(dateStr, granularity){
@@ -467,15 +484,17 @@
   }
   function groupByPeriod(granularity){
     const asc = sortedSnapshots();
+    const cumApport = cumulativeApports(asc);
     const map = new Map();
     asc.forEach(s => { map.set(periodKey(s.date, granularity), s); });
     return [...map.entries()].map(([key, snap]) => ({
-      key, label: periodLabel(key, granularity), date: snap.date, total: total(snap)
+      key, label: periodLabel(key, granularity), date: snap.date, total: total(snap), cumApport: cumApport.get(snap.id) || 0
     }));
   }
 
   // ---- Graphique SVG ----
-  function renderChart(points){
+  function renderChart(points, formatter){
+    formatter = formatter || fmtMoney;
     if(points.length === 0) return '<div class="empty">Aucune donnée pour cette période.</div>';
     if(points.length === 1) return '<div class="empty">Ajoutez au moins deux bilans pour voir une évolution.</div>';
     const w = Math.max(360, points.length * 78);
@@ -492,7 +511,7 @@
     const areaPath = path + ' L' + x(points.length-1).toFixed(1) + ',' + (padT+innerH) + ' L' + x(0).toFixed(1) + ',' + (padT+innerH) + ' Z';
     const dots = points.map((p,i) => {
       const cx = x(i).toFixed(1), cy = y(p.total).toFixed(1);
-      return '<circle cx="'+cx+'" cy="'+cy+'" r="3.5" fill="#c9a15c"><title>'+p.label+' · '+fmtMoney(p.total)+'</title></circle>';
+      return '<circle cx="'+cx+'" cy="'+cy+'" r="3.5" fill="#c9a15c"><title>'+p.label+' · '+formatter(p.total)+'</title></circle>';
     }).join('');
     const labels = points.map((p,i) => {
       const cx = x(i).toFixed(1);
@@ -512,13 +531,17 @@
   function render(){
     const app = document.getElementById('app');
     const asc = sortedSnapshots();
+    const cumApportMap = cumulativeApports(asc);
     const latest = asc[asc.length-1] || null;
     const prev = asc[asc.length-2] || null;
     const latestTotal = latest ? total(latest) : 0;
     const prevTotal = prev ? total(prev) : null;
+    const latestApport = latest ? (Number(latest.apport) || 0) : 0;
     const delta = (prevTotal !== null && prevTotal !== 0) ? ((latestTotal - prevTotal) / prevTotal * 100) : null;
     const deltaClass = delta === null ? 'flat' : (delta > 0 ? 'gain' : (delta < 0 ? 'loss' : 'flat'));
     const deltaArrow = delta === null ? '' : (delta > 0 ? ' ▲' : (delta < 0 ? ' ▼' : ' ='));
+    const realPerf = prev ? realPerformance(latestTotal, prevTotal, latestApport) : null;
+    const realPerfClass = realPerf === null ? 'flat' : (realPerf > 0 ? 'gain' : (realPerf < 0 ? 'loss' : 'flat'));
 
     const latestCost = latest ? totalCost(latest) : 0;
     const latestPV = latestTotal - latestCost;
@@ -528,7 +551,9 @@
     const periodRows = periodPoints.map((p,i) => {
       const prevP = periodPoints[i-1];
       const pct = prevP && prevP.total !== 0 ? ((p.total - prevP.total)/prevP.total*100) : null;
-      return { ...p, pct };
+      const apportPeriode = prevP ? (p.cumApport - prevP.cumApport) : p.cumApport;
+      const realPct = prevP ? realPerformance(p.total, prevP.total, apportPeriode) : null;
+      return { ...p, pct, apportPeriode, realPct };
     }).reverse();
 
     const descHistory = [...state.snapshots].sort((a,b) => b.date.localeCompare(a.date));
@@ -557,6 +582,7 @@
           ${delta !== null ? `<span class="delta-badge ${deltaClass}">${fmtPct(delta)}${deltaArrow} depuis le dernier bilan</span>` : ''}
         </div>
         ${latest ? `<div class="asof">au ${fmtDate(latest.date)}</div>` : ''}
+        ${realPerf !== null ? `<div class="pv-line">Performance réelle (hors apports/retraits) : <span class="v ${realPerfClass==='gain'?'pos':(realPerfClass==='loss'?'neg':'')}">${fmtPct(realPerf)}</span>${latestApport !== 0 ? ` — apport net du dernier bilan : ${fmtMoney(latestApport)}` : ''}</div>` : ''}
         ${latest && latestCost > 0 ? `<div class="pv-line">Plus/moins-value latente : <span class="v ${latestPV>=0?'pos':'neg'}">${fmtMoney(latestPV)} (${fmtPct(latestPVPct)})</span> — coût d'acquisition total : ${fmtMoney(latestCost)}</div>` : ''}
       </div>
 
@@ -571,13 +597,15 @@
         ${periodRows.length ? `
         <div class="table-wrap">
         <table class="ledger">
-          <thead><tr><th>Période</th><th class="num">Valeur</th><th class="num">Variation</th></tr></thead>
+          <thead><tr><th>Période</th><th class="num">Valeur</th><th class="num">Variation</th><th class="num">Perf. réelle</th><th class="num">Apports</th></tr></thead>
           <tbody>
             ${periodRows.map(r => `
               <tr>
                 <td data-label="Période">${r.label}</td>
                 <td class="num" data-label="Valeur">${fmtMoney(r.total)}</td>
                 <td class="num ${r.pct===null?'':(r.pct>0?'pos':(r.pct<0?'neg':''))}" data-label="Variation">${r.pct===null?'—':fmtPct(r.pct)}</td>
+                <td class="num ${r.realPct===null?'':(r.realPct>0?'pos':(r.realPct<0?'neg':''))}" data-label="Perf. réelle">${r.realPct===null?'—':fmtPct(r.realPct)}</td>
+                <td class="num" data-label="Apports">${r.apportPeriode ? fmtMoney(r.apportPeriode) : '—'}</td>
               </tr>`).join('')}
           </tbody>
         </table>
@@ -589,6 +617,8 @@
         ${latest ? renderAllocation(latest) : '<div class="empty">Ajoutez un bilan pour voir le détail de vos lignes.</div>'}
       </section>
 
+      ${renderTickerHistorySection(asc)}
+
       <section>
         <div class="section-head">
           <h2>Historique</h2>
@@ -598,17 +628,22 @@
         ${descHistory.length ? `
         <div class="table-wrap">
         <table class="ledger" style="margin-top:${formOpen?18:0}px">
-          <thead><tr><th>Date</th><th class="num">Total</th><th class="num">Variation</th><th></th></tr></thead>
+          <thead><tr><th>Date</th><th class="num">Total</th><th class="num">Variation</th><th class="num">Perf. réelle</th><th class="num">Apport</th><th></th></tr></thead>
           <tbody>
             ${descHistory.map((s) => {
               const idxAsc = asc.findIndex(x => x.id === s.id);
               const p = idxAsc > 0 ? asc[idxAsc-1] : null;
               const t = total(s);
-              const pct = p ? ((t - total(p))/(total(p)||1)*100) : null;
+              const pt = p ? total(p) : null;
+              const pct = p ? ((t - pt)/(pt||1)*100) : null;
+              const apport = Number(s.apport) || 0;
+              const realPct = p ? realPerformance(t, pt, apport) : null;
               return `<tr>
                 <td data-label="Date">${fmtDate(s.date)}</td>
                 <td class="num" data-label="Total">${fmtMoney(t)}</td>
                 <td class="num ${pct===null?'':(pct>0?'pos':(pct<0?'neg':''))}" data-label="Variation">${pct===null?'—':fmtPct(pct)}</td>
+                <td class="num ${realPct===null?'':(realPct>0?'pos':(realPct<0?'neg':''))}" data-label="Perf. réelle">${realPct===null?'—':fmtPct(realPct)}</td>
+                <td class="num" data-label="Apport">${apport ? fmtMoney(apport) : '—'}</td>
                 <td class="row-actions" data-label="">
                   <button class="btn ghost" data-edit="${s.id}">modifier</button>
                   <button class="btn ghost danger" data-del="${s.id}">supprimer</button>
@@ -663,12 +698,51 @@
     `;
   }
 
+  function renderTickerHistorySection(asc){
+    // Liste des tickers distincts, du plus récemment vu au plus ancien
+    const seen = new Map();
+    [...asc].reverse().forEach(s => s.entries.forEach(e => {
+      if(e.numero && !seen.has(e.numero)) seen.set(e.numero, e.nom || '');
+    }));
+    const tickers = [...seen.keys()];
+    if(tickers.length === 0) return '';
+    if(!etfTab || !tickers.includes(etfTab)) etfTab = tickers[0];
+
+    const points = asc
+      .map(s => {
+        const entry = s.entries.find(e => e.numero === etfTab);
+        return entry ? { label: fmtDate(s.date).slice(0,5), total: Number(entry.cours) || 0 } : null;
+      })
+      .filter(Boolean);
+
+    const first = points[0], last = points[points.length-1];
+    const variation = (first && last && first.total !== 0 && points.length > 1) ? ((last.total - first.total)/first.total*100) : null;
+
+    return `
+      <section>
+        <div class="section-head"><h2>Historique des cours par ETF</h2></div>
+        <div class="tabs">
+          ${tickers.map(tk => {
+            const color = tickerColor(tk);
+            return `<button class="tab ${etfTab===tk?'active':''}" data-etf-tab="${tk}" style="${etfTab===tk?`background:${color}; border-color:${color};`:`color:${color}; border-color:${color};`}">${tk}</button>`;
+          }).join('')}
+        </div>
+        <div class="chart-wrap">${renderChart(points, fmtMoney2)}</div>
+        ${last ? `<div class="pv-line" style="margin-top:10px;">Dernier cours connu : <span class="v">${fmtMoney2(last.total)}</span>${variation !== null ? ` — depuis le premier relevé : <span class="v ${variation>=0?'pos':'neg'}">${fmtPct(variation)}</span>` : ''}</div>` : ''}
+      </section>
+    `;
+  }
+
   function renderForm(){
     return `
       <div class="form-card">
         <div class="date-field">
           <label for="f-date">Date du bilan</label>
           <input type="date" id="f-date" value="${formDate}">
+        </div>
+        <div class="date-field">
+          <label for="f-apport">Apport net depuis le dernier bilan (+ versement / − retrait)</label>
+          <input type="number" id="f-apport" value="${formApport}" step="0.01">
         </div>
         <label style="margin-bottom:10px;">Lignes du portefeuille</label>
         ${formEntries.map((e,i) => {
@@ -727,6 +801,7 @@
       formOpen = true;
       editingId = null;
       formDate = todayISO();
+      formApport = '0';
       const asc = sortedSnapshots();
       const lastSnapshot = asc[asc.length-1];
       formEntries = lastSnapshot
@@ -741,6 +816,7 @@
         if(!s) return;
         editingId = s.id;
         formDate = s.date;
+        formApport = String(s.apport || 0);
         formEntries = s.entries.map(e => ({ numero:e.numero, nom:e.nom, libelle:e.libelle||'', quantite:e.quantite, pru:e.pru, cours:e.cours }));
         formOpen = true;
         render();
@@ -760,6 +836,13 @@
 
     const dateInput = app.querySelector('#f-date');
     if(dateInput) dateInput.onchange = (e) => { formDate = e.target.value; };
+
+    const apportInput = app.querySelector('#f-apport');
+    if(apportInput) apportInput.oninput = (e) => { formApport = e.target.value; };
+
+    app.querySelectorAll('[data-etf-tab]').forEach(btn => {
+      btn.onclick = () => { etfTab = btn.dataset.etfTab; render(); };
+    });
 
     app.querySelectorAll('[data-field]').forEach(input => {
       input.oninput = (e) => {
@@ -794,17 +877,19 @@
         }));
       if(cleaned.length === 0){ alert('Ajoutez au moins une ligne avec un n° ETF, une quantité et un cours.'); return; }
       if(!formDate){ alert('Choisissez une date pour ce bilan.'); return; }
+      const apportValue = Number(formApport) || 0;
 
       if(editingId){
         const idx = state.snapshots.findIndex(s => s.id === editingId);
-        if(idx > -1) state.snapshots[idx] = { id: editingId, date: formDate, entries: cleaned };
+        if(idx > -1) state.snapshots[idx] = { id: editingId, date: formDate, apport: apportValue, entries: cleaned };
       } else {
         const existing = state.snapshots.find(s => s.date === formDate);
         if(existing){
           if(!confirm('Un bilan existe déjà à cette date. Le remplacer ?')) return;
           existing.entries = cleaned;
+          existing.apport = apportValue;
         } else {
-          state.snapshots.push({ id: uid(), date: formDate, entries: cleaned });
+          state.snapshots.push({ id: uid(), date: formDate, apport: apportValue, entries: cleaned });
         }
       }
       formOpen = false; editingId = null;
