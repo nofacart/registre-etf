@@ -409,13 +409,33 @@
     catch(e){ console.error('Erreur de sauvegarde locale', e); alert('La sauvegarde locale a échoué. Pensez à exporter vos données.'); }
   }
 
-  function exportData(){
-    const blob = new Blob([JSON.stringify(state, null, 2)], { type: 'application/json' });
+  async function exportData(){
+    const json = JSON.stringify(state, null, 2);
+    const filename = 'registre-etf-sauvegarde-' + todayISO() + '.json';
+
+    // Navigateurs compatibles (Chrome / Edge / Opera) : fenêtre "Enregistrer sous..."
+    if(window.showSaveFilePicker){
+      try{
+        const handle = await window.showSaveFilePicker({
+          suggestedName: filename,
+          types: [{ description: 'Sauvegarde JSON', accept: { 'application/json': ['.json'] } }]
+        });
+        const writable = await handle.createWritable();
+        await writable.write(json);
+        await writable.close();
+        return;
+      }catch(e){
+        if(e && e.name === 'AbortError') return; // l'utilisateur a annulé, rien à faire
+        console.error('Échec de l’enregistrement via le sélecteur de fichier, repli sur le téléchargement classique.', e);
+      }
+    }
+
+    // Repli : téléchargement classique (Firefox, Safari, ou si l'API a échoué)
+    const blob = new Blob([json], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
-    const stamp = todayISO();
     a.href = url;
-    a.download = 'registre-etf-sauvegarde-' + stamp + '.json';
+    a.download = filename;
     document.body.appendChild(a);
     a.click();
     a.remove();
