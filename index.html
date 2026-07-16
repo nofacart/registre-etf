@@ -1,3 +1,9 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Registre — Portefeuille ETF</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 
@@ -278,7 +284,47 @@
     .hero .total{ font-size:36px; }
     .entry-grid-1, .entry-grid-2{ grid-template-columns:1fr; }
   }
+
+  @media (max-width:640px){
+    .masthead{ flex-wrap:wrap; gap:12px; }
+    table.ledger, table.ledger thead, table.ledger tbody, table.ledger th, table.ledger td, table.ledger tr{
+      display:block;
+    }
+    table.ledger{ min-width:0; }
+    table.ledger thead{ display:none; }
+    table.ledger tr{
+      border:1px solid var(--rule);
+      border-radius:5px;
+      padding:10px 12px;
+      margin-bottom:10px;
+    }
+    table.ledger tr:last-child{ margin-bottom:0; }
+    table.ledger td{
+      border-bottom:none;
+      display:flex;
+      justify-content:space-between;
+      align-items:center;
+      gap:10px;
+      padding:5px 0;
+      white-space:normal;
+      text-align:left;
+    }
+    table.ledger td.num{ text-align:right; }
+    table.ledger td::before{
+      content: attr(data-label);
+      color:var(--muted);
+      font-size:10px;
+      text-transform:uppercase;
+      letter-spacing:0.05em;
+      flex:0 0 auto;
+    }
+    table.ledger td.row-actions{ justify-content:flex-end; }
+    table.ledger td.row-actions::before{ content:''; }
+    .table-wrap{ overflow-x:visible; }
+  }
 </style>
+</head>
+<body>
 
 <div class="root" id="app"></div>
 
@@ -494,7 +540,7 @@
           <div class="sub">${latest ? 'dernier bilan : ' + fmtDate(latest.date) : 'aucun bilan enregistré'}</div>
           <div class="sub" style="margin-top:3px; opacity:0.75;">Données stockées dans ce navigateur — pensez à exporter régulièrement.</div>
         </div>
-        <div style="display:flex; align-items:center; gap:14px;">
+        <div style="display:flex; align-items:center; gap:14px; flex-wrap:wrap;">
           <div class="currency-picker">
             ${CURRENCIES.map(c => `<button data-currency="${c}" class="${state.settings.currency===c?'active':''}">${c}</button>`).join('')}
           </div>
@@ -529,9 +575,9 @@
           <tbody>
             ${periodRows.map(r => `
               <tr>
-                <td>${r.label}</td>
-                <td class="num">${fmtMoney(r.total)}</td>
-                <td class="num ${r.pct===null?'':(r.pct>0?'pos':(r.pct<0?'neg':''))}">${r.pct===null?'—':fmtPct(r.pct)}</td>
+                <td data-label="Période">${r.label}</td>
+                <td class="num" data-label="Valeur">${fmtMoney(r.total)}</td>
+                <td class="num ${r.pct===null?'':(r.pct>0?'pos':(r.pct<0?'neg':''))}" data-label="Variation">${r.pct===null?'—':fmtPct(r.pct)}</td>
               </tr>`).join('')}
           </tbody>
         </table>
@@ -560,10 +606,10 @@
               const t = total(s);
               const pct = p ? ((t - total(p))/(total(p)||1)*100) : null;
               return `<tr>
-                <td>${fmtDate(s.date)}</td>
-                <td class="num">${fmtMoney(t)}</td>
-                <td class="num ${pct===null?'':(pct>0?'pos':(pct<0?'neg':''))}">${pct===null?'—':fmtPct(pct)}</td>
-                <td class="row-actions">
+                <td data-label="Date">${fmtDate(s.date)}</td>
+                <td class="num" data-label="Total">${fmtMoney(t)}</td>
+                <td class="num ${pct===null?'':(pct>0?'pos':(pct<0?'neg':''))}" data-label="Variation">${pct===null?'—':fmtPct(pct)}</td>
+                <td class="row-actions" data-label="">
                   <button class="btn ghost" data-edit="${s.id}">modifier</button>
                   <button class="btn ghost danger" data-del="${s.id}">supprimer</button>
                 </td>
@@ -600,15 +646,15 @@
             const pct = (v / t * 100);
             return `
               <tr>
-                <td><span class="stamp" style="border-color:${color}; color:${color};">${e.numero || '—'}</span></td>
-                <td>${e.nom || '—'}</td>
-                <td>${e.libelle ? `<span class="theme-chip">${e.libelle}</span>` : '—'}</td>
-                <td class="num">${e.quantite || 0}</td>
-                <td class="num">${fmtMoney2(e.pru)}</td>
-                <td class="num">${fmtMoney2(e.cours)}</td>
-                <td class="num">${fmtMoney(v)}</td>
-                <td class="num ${cost?(pv>=0?'pos':'neg'):''}">${cost ? fmtMoney(pv) + ' (' + fmtPct(pvPct) + ')' : '—'}</td>
-                <td><span class="alloc-bar-track"><span class="alloc-bar-fill" style="width:${pct.toFixed(1)}%; background:${color};"></span></span>${pct.toFixed(1).replace('.',',')}%</td>
+                <td data-label="N° ETF"><span class="stamp" style="border-color:${color}; color:${color};">${e.numero || '—'}</span></td>
+                <td data-label="Nom">${e.nom || '—'}</td>
+                <td data-label="Libellé">${e.libelle ? `<span class="theme-chip">${e.libelle}</span>` : '—'}</td>
+                <td class="num" data-label="Quantité">${e.quantite || 0}</td>
+                <td class="num" data-label="PRU">${fmtMoney2(e.pru)}</td>
+                <td class="num" data-label="Cours">${fmtMoney2(e.cours)}</td>
+                <td class="num" data-label="Valeur">${fmtMoney(v)}</td>
+                <td class="num ${cost?(pv>=0?'pos':'neg'):''}" data-label="+/- value">${cost ? fmtMoney(pv) + ' (' + fmtPct(pvPct) + ')' : '—'}</td>
+                <td data-label="Répartition"><span class="alloc-bar-track"><span class="alloc-bar-fill" style="width:${pct.toFixed(1)}%; background:${color};"></span></span>${pct.toFixed(1).replace('.',',')}%</td>
               </tr>`;
           }).join('')}
         </tbody>
@@ -770,3 +816,5 @@
   loadData();
 })();
 </script>
+</body>
+</html>
