@@ -677,7 +677,6 @@
     });
 
     const addBtn = app.querySelector('#btn-add');
-<<<<<<< HEAD
     if(addBtn) addBtn.onclick = () => {
       formOpen = true;
       editingId = null;
@@ -689,9 +688,6 @@
         : [blankEntry()];
       render();
     };
-=======
-    if(addBtn) addBtn.onclick = () => { formOpen = true; editingId = null; formDate = todayISO(); formEntries = [blankEntry()]; render(); };
->>>>>>> 25aab8fd4c48e9bafbfcc057ee3c8f5ffca71661
 
     app.querySelectorAll('[data-edit]').forEach(btn => {
       btn.onclick = () => {
