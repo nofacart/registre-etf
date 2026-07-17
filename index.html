@@ -339,7 +339,6 @@
   let formOpen = false;
   let editingId = null;
   let formDate = todayISO();
-  let formApport = '0';
   let formEntries = [ blankEntry() ];
 
   function blankEntry(){ return { numero:'', nom:'', libelle:'', quantite:'', pru:'', cours:'' }; }
@@ -396,7 +395,7 @@
         const parsed = JSON.parse(raw);
         if(parsed && Array.isArray(parsed.snapshots)){
           state = {
-            snapshots: parsed.snapshots.map(s => ({ ...s, apport: Number(s.apport) || 0, entries: s.entries.map(normalizeEntry) })),
+            snapshots: parsed.snapshots.map(s => ({ ...s, entries: s.entries.map(normalizeEntry) })),
             settings: parsed.settings || { currency:'€' }
           };
         }
@@ -452,7 +451,7 @@
           if(!confirm('Cela va remplacer les données actuellement affichées par celles du fichier importé. Continuer ?')) return;
         }
         state = {
-          snapshots: parsed.snapshots.map(s => ({ ...s, apport: Number(s.apport) || 0, entries: s.entries.map(normalizeEntry) })),
+          snapshots: parsed.snapshots.map(s => ({ ...s, entries: s.entries.map(normalizeEntry) })),
           settings: parsed.settings || { currency:'€' }
         };
         await saveData();
@@ -471,12 +470,34 @@
   function total(snapshot){ return snapshot.entries.reduce((s,e) => s + entryValue(e), 0); }
   function totalCost(snapshot){ return snapshot.entries.reduce((s,e) => s + entryCost(e), 0); }
 
-  // Cumul des apports/retraits, snapshot par snapshot, dans l'ordre chronologique
-  function cumulativeApports(asc){
-    const map = new Map();
-    let running = 0;
-    asc.forEach(s => { running += (Number(s.apport) || 0); map.set(s.id, running); });
-    return map;
+  // Apport net entre deux bilans : comparaison ligne à ligne, déclenchée UNIQUEMENT
+  // par un changement de quantité (achat, vente, ligne ajoutée ou soldée).
+  // Un PRU corrigé à quantité inchangée n'est jamais compté comme un mouvement d'argent.
+  function apportEntre(snapNow, snapPrev){
+    if(!snapPrev) return totalCost(snapNow); // tout premier bilan : coût initial = apport de départ
+    const prevMap = new Map(snapPrev.entries.map(e => [e.numero, e]));
+    const nowMap = new Map(snapNow.entries.map(e => [e.numero, e]));
+    let apport = 0;
+    nowMap.forEach((eNow, numero) => {
+      const eOld = prevMap.get(numero);
+      if(!eOld){
+        apport += entryCost(eNow); // nouvelle ligne : coût initial entier
+        return;
+      }
+      const deltaQty = Number(eNow.quantite) - Number(eOld.quantite);
+      if(deltaQty > 0){
+        // Achat : coût des nouvelles parts = variation du coût total pondéré (nouveau PRU fait foi)
+        apport += entryCost(eNow) - entryCost(eOld);
+      } else if(deltaQty < 0){
+        // Vente : parts sorties valorisées à l'ANCIEN PRU (avant la vente), pas au nouveau PRU affiché
+        apport += deltaQty * (Number(eOld.pru) || 0);
+      }
+      // quantité inchangée -> aucune contribution, même si le PRU a été corrigé
+    });
+    prevMap.forEach((eOld, numero) => {
+      if(!nowMap.has(numero)) apport += -entryCost(eOld); // ligne entièrement soldée, au PRU d'avant vente
+    });
+    return apport;
   }
 
   // Performance réelle = variation de valeur hors effet des apports/retraits
@@ -504,11 +525,10 @@
   }
   function groupByPeriod(granularity){
     const asc = sortedSnapshots();
-    const cumApport = cumulativeApports(asc);
     const map = new Map();
     asc.forEach(s => { map.set(periodKey(s.date, granularity), s); });
     return [...map.entries()].map(([key, snap]) => ({
-      key, label: periodLabel(key, granularity), date: snap.date, total: total(snap), cumApport: cumApport.get(snap.id) || 0
+      key, label: periodLabel(key, granularity), date: snap.date, total: total(snap), snap
     }));
   }
 
@@ -551,12 +571,11 @@
   function render(){
     const app = document.getElementById('app');
     const asc = sortedSnapshots();
-    const cumApportMap = cumulativeApports(asc);
     const latest = asc[asc.length-1] || null;
     const prev = asc[asc.length-2] || null;
     const latestTotal = latest ? total(latest) : 0;
     const prevTotal = prev ? total(prev) : null;
-    const latestApport = latest ? (Number(latest.apport) || 0) : 0;
+    const latestApport = latest ? apportEntre(latest, prev) : 0;
     const delta = (prevTotal !== null && prevTotal !== 0) ? ((latestTotal - prevTotal) / prevTotal * 100) : null;
     const deltaClass = delta === null ? 'flat' : (delta > 0 ? 'gain' : (delta < 0 ? 'loss' : 'flat'));
     const deltaArrow = delta === null ? '' : (delta > 0 ? ' ▲' : (delta < 0 ? ' ▼' : ' ='));
@@ -571,7 +590,7 @@
     const periodRows = periodPoints.map((p,i) => {
       const prevP = periodPoints[i-1];
       const pct = prevP && prevP.total !== 0 ? ((p.total - prevP.total)/prevP.total*100) : null;
-      const apportPeriode = prevP ? (p.cumApport - prevP.cumApport) : p.cumApport;
+      const apportPeriode = apportEntre(p.snap, prevP ? prevP.snap : null);
       const realPct = prevP ? realPerformance(p.total, prevP.total, apportPeriode) : null;
       return { ...p, pct, apportPeriode, realPct };
     }).reverse();
@@ -602,7 +621,7 @@
           ${delta !== null ? `<span class="delta-badge ${deltaClass}">${fmtPct(delta)}${deltaArrow} depuis le dernier bilan</span>` : ''}
         </div>
         ${latest ? `<div class="asof">au ${fmtDate(latest.date)}</div>` : ''}
-        ${realPerf !== null ? `<div class="pv-line">Performance réelle (hors apports/retraits) : <span class="v ${realPerfClass==='gain'?'pos':(realPerfClass==='loss'?'neg':'')}">${fmtPct(realPerf)}</span>${latestApport !== 0 ? ` — apport net du dernier bilan : ${fmtMoney(latestApport)}` : ''}</div>` : ''}
+        ${realPerf !== null ? `<div class="pv-line">Performance réelle (hors apports/retraits) : <span class="v ${realPerfClass==='gain'?'pos':(realPerfClass==='loss'?'neg':'')}">${fmtPct(realPerf)}</span>${latestApport !== 0 ? ` — apport net estimé depuis le dernier bilan : ${fmtMoney(latestApport)}` : ''}</div>` : ''}
         ${latest && latestCost > 0 ? `<div class="pv-line">Plus/moins-value latente : <span class="v ${latestPV>=0?'pos':'neg'}">${fmtMoney(latestPV)} (${fmtPct(latestPVPct)})</span> — coût d'acquisition total : ${fmtMoney(latestCost)}</div>` : ''}
       </div>
 
@@ -617,7 +636,7 @@
         ${periodRows.length ? `
         <div class="table-wrap">
         <table class="ledger">
-          <thead><tr><th>Période</th><th class="num">Valeur</th><th class="num">Variation</th><th class="num">Perf. réelle</th><th class="num">Apports</th></tr></thead>
+          <thead><tr><th>Période</th><th class="num">Valeur</th><th class="num">Variation</th><th class="num">Perf. réelle</th><th class="num">Apports (estimés)</th></tr></thead>
           <tbody>
             ${periodRows.map(r => `
               <tr>
@@ -648,7 +667,7 @@
         ${descHistory.length ? `
         <div class="table-wrap">
         <table class="ledger" style="margin-top:${formOpen?18:0}px">
-          <thead><tr><th>Date</th><th class="num">Total</th><th class="num">Variation</th><th class="num">Perf. réelle</th><th class="num">Apport</th><th></th></tr></thead>
+          <thead><tr><th>Date</th><th class="num">Total</th><th class="num">Variation</th><th class="num">Perf. réelle</th><th class="num">Apport (estimé)</th><th></th></tr></thead>
           <tbody>
             ${descHistory.map((s) => {
               const idxAsc = asc.findIndex(x => x.id === s.id);
@@ -656,7 +675,7 @@
               const t = total(s);
               const pt = p ? total(p) : null;
               const pct = p ? ((t - pt)/(pt||1)*100) : null;
-              const apport = Number(s.apport) || 0;
+              const apport = apportEntre(s, p);
               const realPct = p ? realPerformance(t, pt, apport) : null;
               return `<tr>
                 <td data-label="Date">${fmtDate(s.date)}</td>
@@ -760,10 +779,6 @@
           <label for="f-date">Date du bilan</label>
           <input type="date" id="f-date" value="${formDate}">
         </div>
-        <div class="date-field">
-          <label for="f-apport">Apport net depuis le dernier bilan (+ versement / − retrait)</label>
-          <input type="number" id="f-apport" value="${formApport}" step="0.01">
-        </div>
         <label style="margin-bottom:10px;">Lignes du portefeuille</label>
         ${formEntries.map((e,i) => {
           const v = entryValue(e), cost = entryCost(e), pv = v-cost;
@@ -821,7 +836,6 @@
       formOpen = true;
       editingId = null;
       formDate = todayISO();
-      formApport = '0';
       const asc = sortedSnapshots();
       const lastSnapshot = asc[asc.length-1];
       formEntries = lastSnapshot
@@ -836,7 +850,6 @@
         if(!s) return;
         editingId = s.id;
         formDate = s.date;
-        formApport = String(s.apport || 0);
         formEntries = s.entries.map(e => ({ numero:e.numero, nom:e.nom, libelle:e.libelle||'', quantite:e.quantite, pru:e.pru, cours:e.cours }));
         formOpen = true;
         render();
@@ -856,9 +869,6 @@
 
     const dateInput = app.querySelector('#f-date');
     if(dateInput) dateInput.onchange = (e) => { formDate = e.target.value; };
-
-    const apportInput = app.querySelector('#f-apport');
-    if(apportInput) apportInput.oninput = (e) => { formApport = e.target.value; };
 
     app.querySelectorAll('[data-etf-tab]').forEach(btn => {
       btn.onclick = () => { etfTab = btn.dataset.etfTab; render(); };
@@ -897,19 +907,17 @@
         }));
       if(cleaned.length === 0){ alert('Ajoutez au moins une ligne avec un n° ETF, une quantité et un cours.'); return; }
       if(!formDate){ alert('Choisissez une date pour ce bilan.'); return; }
-      const apportValue = Number(formApport) || 0;
 
       if(editingId){
         const idx = state.snapshots.findIndex(s => s.id === editingId);
-        if(idx > -1) state.snapshots[idx] = { id: editingId, date: formDate, apport: apportValue, entries: cleaned };
+        if(idx > -1) state.snapshots[idx] = { id: editingId, date: formDate, entries: cleaned };
       } else {
         const existing = state.snapshots.find(s => s.date === formDate);
         if(existing){
           if(!confirm('Un bilan existe déjà à cette date. Le remplacer ?')) return;
           existing.entries = cleaned;
-          existing.apport = apportValue;
         } else {
-          state.snapshots.push({ id: uid(), date: formDate, apport: apportValue, entries: cleaned });
+          state.snapshots.push({ id: uid(), date: formDate, entries: cleaned });
         }
       }
       formOpen = false; editingId = null;
